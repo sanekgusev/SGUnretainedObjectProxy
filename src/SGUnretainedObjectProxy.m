@@ -10,13 +10,12 @@
 
 @interface SGUnretainedObjectProxy () {
     id __weak _originalObject;
+    Class __unsafe_unretained _originalObjectClass;
 }
 
 @end
 
 @implementation SGUnretainedObjectProxy
-
-@synthesize originalObject = _originalObject;
 
 #pragma mark - init/dealloc
 
@@ -32,37 +31,28 @@
         return nil;
     }
     _originalObject = object;
+    _originalObjectClass = [object class];
     return self;
-}
-
-#pragma mark - public
-
-+ (instancetype)proxyWithNonRetainedObject:(id)object {
-    return [[self alloc] initWithNonRetainedObject:object];
 }
 
 #pragma mark - NSProxy
 
-- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector {
+- (id)forwardingTargetForSelector:(SEL)aSelector {
     id strongOriginalObject = _originalObject;
-    if (_cmd != aSelector && [strongOriginalObject respondsToSelector:_cmd]) {
-        return [strongOriginalObject methodSignatureForSelector:aSelector];
-    }
-    return nil;
+    return strongOriginalObject;
+}
+
+- (NSMethodSignature *)methodSignatureForSelector:(SEL)aSelector {
+    NSCAssert(!_originalObject, @"_originalObject");
+    return [_originalObjectClass instanceMethodSignatureForSelector:aSelector];
 }
 
 - (void)forwardInvocation:(NSInvocation *)invocation {
-    // TODO: check if invocation can simply be invoked with nil target instead
-    id strongOriginalObject = _originalObject;
-    if (strongOriginalObject) {
-        [invocation invokeWithTarget:strongOriginalObject];
-    }
-    else {
-        NSUInteger methodReturnLength = [[invocation methodSignature] methodReturnLength];
-        if (methodReturnLength > 0) {
-            NSMutableData *returnData = [NSMutableData dataWithLength:methodReturnLength];
-            [invocation setReturnValue:[returnData mutableBytes]];
-        }
+    NSCAssert(!_originalObject, @"_originalObject");
+    NSUInteger methodReturnLength = [[invocation methodSignature] methodReturnLength];
+    if (methodReturnLength > 0) {
+        NSMutableData *returnData = [NSMutableData dataWithLength:methodReturnLength];
+        [invocation setReturnValue:[returnData mutableBytes]];
     }
 }
 
@@ -70,36 +60,24 @@
 
 - (id)copyWithZone:(NSZone *)zone {
     id strongOriginalObject = _originalObject;
-    if ([strongOriginalObject respondsToSelector:_cmd]) {
-        id copiedObject = [strongOriginalObject copy];
-        if (copiedObject == strongOriginalObject) {
-            return self;
-        }
-        return [[self class] proxyWithNonRetainedObject:copiedObject];
+    if (!strongOriginalObject) {
+        return nil;
     }
-    [NSException raise:NSInternalInconsistencyException
-                format:@"Object does not support copying"];
-    return nil;
+    id copiedObject = [strongOriginalObject copy];
+    if (copiedObject == strongOriginalObject) {
+        return self;
+    }
+    return [[[self class] alloc] initWithNonRetainedObject:copiedObject];
 }
 
 #pragma mark - NSMutableCopying 
 
 - (id)mutableCopyWithZone:(NSZone *)zone {
     id strongOriginalObject = _originalObject;
-    if ([strongOriginalObject respondsToSelector:_cmd]) {
-        return [[self class] proxyWithNonRetainedObject:[strongOriginalObject mutableCopy]];
+    if (!strongOriginalObject) {
+        return nil;
     }
-    [NSException raise:NSInternalInconsistencyException
-                format:@"Object does not support mutable copying"];
-    return nil;
-}
-
-#pragma mark - NSCoding 
-
-- (id)initWithCoder:(NSCoder *)aDecoder {
-    [NSException raise:NSInternalInconsistencyException
-                format:@"Cannot instantiate proxy from a decoder"];
-    return nil;
+    return [[[self class] alloc] initWithNonRetainedObject:[strongOriginalObject mutableCopy]];
 }
 
 @end

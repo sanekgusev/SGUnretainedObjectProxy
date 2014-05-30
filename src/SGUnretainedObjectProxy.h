@@ -8,12 +8,8 @@
 
 #import <Foundation/Foundation.h>
 
-@interface SGUnretainedObjectProxy : NSProxy <NSCopying,
-    NSMutableCopying, NSCoding>
-
-@property (nonatomic, readonly) id originalObject;
+@interface SGUnretainedObjectProxy : NSProxy <NSCopying, NSMutableCopying>
 
 - (id)initWithNonRetainedObject:(id)object;
-+ (instancetype)proxyWithNonRetainedObject:(id)object;
 
 @end
